@@ -22,7 +22,28 @@ const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 if (!readFileSync(src).subarray(0, 8).equals(PNG_MAGIC)) {
   throw new Error('entry.png is not a PNG file');
 }
+
+// The bounty requires a 1024x1024 front page: parse the IHDR chunk
+// (length, type, width, height) and refuse anything of a different size.
+const ihdr = readFileSync(src).subarray(8, 33);
+if (ihdr.length < 25 || ihdr.subarray(4, 8).toString('latin1') !== 'IHDR') {
+  throw new Error('entry.png has no IHDR chunk');
+}
+const width = ihdr.readUInt32BE(8);
+const height = ihdr.readUInt32BE(12);
+if (width !== 1024 || height !== 1024) {
+  throw new Error(`entry.png is ${width}x${height}, expected 1024x1024`);
+}
 copyFileSync(src, dest);
+
+// Read the copy back and compare it byte for byte with the source, so
+// a truncated or corrupted write is caught here instead of shipping a
+// different image to one of the two grader runs.
+const srcData = readFileSync(src);
+const destData = readFileSync(dest);
+if (!destData.equals(srcData)) {
+  throw new Error('copied entry.png differs from the source');
+}
 
 // The gate takes at most 1 MiB: fail loudly instead of shipping a
 // too-large image.
